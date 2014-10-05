@@ -16,16 +16,36 @@ empty = Braun 0 Nil
 
 size (Braun n _) = n
 
--- Okasaki:
-fromList xs = head $ foldr build [empty] $ rows 1 xs
+{-
 
-rows :: Int -> [a] -> [(Int,[a])]
-rows k [] = []
-rows k xs = (k, take k xs) : rows (2*k) (drop k xs)
+Okasaki has a linear-time version of fromList that requires less code
+and no polymorphic recursion, but it is less lazy, and so can't
+complete queries like "fst $ popFront $ fromList [0..]". This version
+is also linear time, but also produces reasonable output on infinite
+input.
 
-build (k, xs) ts = zipWith3 makeNode xs ts1 ts2
-  where (ts1, ts2) = splitAt k (ts ++ repeat empty)
-        makeNode x (Braun n s) (Braun m t) = Braun (n+m+1) (More x s t)
+-}
+
+preFromList :: [a] -> Pre a
+preFromList [] = Nil
+preFromList (x:xs) = 
+  let (od,ev) = unLink $ preFromList $ pairUp xs
+  in More x od ev
+     
+pairUp :: [a] -> [(a, Maybe a)]
+pairUp [] = []
+pairUp [x] = [(x,Nothing)]
+pairUp (x:y:ys) = (x,Just y):pairUp ys
+
+unLink :: Pre (a,Maybe b) -> (Pre a,Pre b)
+unLink Nil = (Nil,Nil)
+unLink (More (x,Nothing) Nil Nil) = (More x Nil Nil,Nil)
+unLink (More (x,Just y) od ev) =
+  let (odx,ody) = unLink od
+      (evx,evy) = unLink ev
+  in (More x odx evx, More y ody evy)
+
+fromList xs = Braun (length xs) (preFromList xs)
 
 preToList Nil = []
 preToList (More x ys zs) = x:(go [ys,zs] [] [])
@@ -75,17 +95,38 @@ nth i (More _ y z) =
      then nth j y
      else nth j z
 
+
+data UpperBound a = Exact a
+                  | TooHigh Int
+                  | Finite
+
+-- If the input is infinite, find an upper bound if one exists. If the
+-- inpute is finite, returns an upper bound or Nothing. If Nothing,
+-- there may be an upper bound that just wan't found.
+ub :: (a -> b -> Ordering) -> a -> Pre b -> UpperBound b
+ub f x t = go f x t 0 1
+  where 
+    go _ _ Nil _ _ = Finite
+    go f x (More hd _ ev) n k = 
+      case f x hd of
+        LT -> TooHigh n
+        EQ -> Exact hd
+        GT -> go f x ev (n+2*k) (2*k)
+
 glb :: (a -> b -> Ordering) -> a -> Braun b -> Maybe b
-glb f _ (Braun 0 Nil) = Nothing
+glb f _ (Braun _ Nil) = Nothing
 glb f x xs@(Braun n ys@(More h _ _)) = 
   case f x h of
     LT -> Nothing
     EQ -> Just h
     GT -> 
-      let final = nth (n-1) ys 
-      in case f x final of
-           LT -> go 0 (n-1)
-           _ -> Just final
+      case ub f x ys of
+        Exact ans -> Just ans
+        Finite -> let final = nth (n-1) ys 
+                  in case f x final of
+                      LT -> go 0 (n-1)
+                      _ -> Just final
+        TooHigh m -> go 0 m
   where go i j = if j <= i
                  then if 0 == j
                       then Nothing
