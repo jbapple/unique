@@ -23,7 +23,8 @@ complex than the standard one without nested types.
 
 -}
 
-type Sym a b = (b,a,b)
+data Kids b c a = Kids (b a) a (c a)
+                  deriving (Show)
                       
 {-               
 
@@ -40,23 +41,27 @@ rather than ((),a,()).
 
 -}
 
-data B b s sas a = P b
-                 | Q (B (b,a,b) (b,a,s) (Sym a (b,a,s)) a)
-                 | R (B (b,a,s) sas (Sym a sas) a)
+data B b s sas a = P (b a)
+                 | Q (B (Kids b b) (Kids b s) (Kids (Kids b s) (Kids b s)) a)
+                 | R (B (Kids b s) sas (Kids sas sas) a)
                    deriving (Show)
 
-data Braun a = Braun (B a () a a)
+newtype Id a = Id a deriving (Show)
+data K a = K deriving (Show)
+
+data Braun a = Braun (B Id K Id a)
              | Nil
                deriving (Show)
 
+popFront :: Braun a -> Maybe (a,Braun a)
 popFront Nil = Nothing
-popFront (Braun (P x)) = Just (x,Nil)
+popFront (Braun (P (Id x))) = Just (x,Nil)
 popFront (Braun (Q xs)) = 
   let (y,ys) = popFrontQ xs popOne
   in Just (y,case ys of
          Left same -> Braun (Q same)
          Right dif -> Braun (R dif))
-popFront (Braun (R (P (x,y,())))) = Just (y,Braun (P x))     
+popFront (Braun (R (P (Kids x y K)))) = Just (y,Braun (P x))     
 popFront (Braun (R (R xs))) =
   let (y,ys) = popFrontRR xs popTwo
   in Just (y,case ys of
@@ -68,13 +73,13 @@ popFront (Braun (R (Q xs))) =
          Left same -> Braun $ R $ Q same
          Right dif -> Braun $ R $ R dif)
 
-popFrontQ :: B (Sym a b) (b,a,s) (Sym a (b,a,s)) a ->
-             (b -> (a,s)) ->
-             (a,Either (B (Sym a b) (b,a,s) (Sym a (b,a,s)) a)
-                       (B (b,a,s) sas (Sym a sas) a))
-popFrontQ (P (bb,aa,ss)) f = 
+popFrontQ :: B (Kids b b) (Kids b s) (Kids (Kids b s) (Kids b s)) a ->
+             (b a -> (a,s a)) ->
+             (a,Either (B (Kids b b) (Kids b s) (Kids (Kids b s) (Kids b s)) a)
+                       (B (Kids b s) sas (Kids sas sas) a))
+popFrontQ (P (Kids bb aa ss)) f = 
   let (x,xs) = f bb
-  in  (aa,Right $ P (ss,x,xs))
+  in  (aa,Right $ P (Kids ss x xs))
 popFrontQ (R (P xs)) f = 
   let (y,ys) = popFrontRR (P xs) (popKid f)
   in (y,case ys of
@@ -96,13 +101,13 @@ popFrontQ (Q xs) f =
          Left same -> Left $ Q same
          Right dif -> Left $ R dif)
 
-popFrontRR :: B (b,a,s) (s,a,s) (Sym a (s,a,s)) a ->
-              (b -> (a,s)) -> 
-             (a,Either (B (b,a,s) (s,a,s) (Sym a (s,a,s)) a)
-                       (B (s,a,s) (s,a,t) (Sym a (s,a,t)) a))
-popFrontRR (P (bb,aa,ss)) f = 
+popFrontRR :: B (Kids b s) (Kids s s) (Kids (Kids s s) (Kids s s)) a ->
+              (b a -> (a,s a)) -> 
+             (a,Either (B (Kids b s) (Kids s s) (Kids (Kids s s) (Kids s s)) a)
+                       (B (Kids s s) (Kids s t) (Kids (Kids s t) (Kids s t)) a))
+popFrontRR (P (Kids bb aa ss)) f = 
   let (x,xs) = f bb
-  in  (aa,Right $ P (ss,x,xs))
+  in  (aa,Right $ P (Kids ss x xs))
 popFrontRR (R (P xs)) f = 
   let (y,ys) = popFrontRR (P xs) (popKid f)
   in (y,case ys of
@@ -124,45 +129,45 @@ popFrontRR (Q xs) f =
          Left same -> Left $ Q same
          Right dif -> Left $ R dif)
 
-popKid :: (t -> (t3, t4)) -> (t, t1, t2) -> (t1, (t2, t3, t4))
-popKid f (x,y,z) =
+--popKid :: (t -> (t3, t4)) -> (t, t1, t2) -> (t1, (t2, t3, t4))
+popKid f (Kids x y z) =
   let (b,bs) = f x
-  in (y,(z,b,bs))
+  in (y,(Kids z b bs))
      
-popOne x = (x,())
-popTwo (x,y,()) = (y,x)     
+popOne (Id x) = (x,K)
+popTwo (Kids x y K) = (y,x)     
 
 pushFront :: a -> Braun a -> Braun a
-pushFront x Nil = Braun $ P x
+pushFront x Nil = Braun $ P $ Id x
 pushFront x (Braun xs) =
-  let f y z = (z,y,())
-      g y _ = y
-      h y z = (z,y,())
+  let f y z = (Kids z y K)
+      g y _ = Id y
+      h y z = (Kids z y K)
   in case pushFrontB x f g h xs of
        Left ans -> Braun $ R ans
        Right ans -> Braun ans
 
 pushFrontB :: a -> 
-             (a -> big -> huge) -> 
-             (a -> small -> big) -> 
-             (a -> sas -> (big,a,small)) -> 
+             (a -> big a -> huge a) -> 
+             (a -> small a -> big a) -> 
+             (a -> sas a -> Kids big small a) -> 
              B big small sas a -> 
-             Either (B huge big (big,a,big) a)
+             Either (B huge big (Kids big big) a)
                     (B big small sas a)
 pushFrontB z f _ _ (P x) = Left $ P (f z x)
 pushFrontB z f j m (Q x) = 
-  let g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
-      g k y (p,q,r) = 
+  let --g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
+      g k y (Kids p q r) = 
         let r2 = k q r
-        in (r2,y,p)
+        in Kids r2 y p
   in case pushFrontB z (g f) (g j) (g (g j)) x
      of Left ans -> Left $ R ans
         Right ans -> Right $ Q ans
 pushFrontB z f j m (R x) = 
-  let g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
-      g k y (p,q,r) = 
+  let --g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
+      g k y (Kids p q r) = 
         let r2 = k q r
-        in (r2,y,p)
+        in Kids r2 y p
   in case pushFrontB z (g j) m (g m) x
      of Left ans -> Right $ Q ans
         Right ans -> Right $ R ans
@@ -182,7 +187,7 @@ though there are a lof of missing match cases here, which should make
 the reader wary.
 
 -}
-
+{-
 toList Nil = []
 toList (Braun x) = 
   let fb x = B x T T
@@ -275,3 +280,4 @@ unLink (B (x,Just y) od ev) =
   let (odx,ody) = unLink od
       (evx,evy) = unLink ev
   in (B x odx evx, B y ody evy)
+-}
