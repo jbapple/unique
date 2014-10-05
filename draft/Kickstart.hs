@@ -1,24 +1,50 @@
--- {-# LANGUAGE RankNTypes,ExistentialQuantification #-}
-
 module Kickstart where
+
+{-
+
+This module shows an implementation of Braun trees in which the
+structural invariant is enforced by the type system. These kind of
+guarantees are availble via dependent types, as shown for Braun trees
+in the Dependent ML work of Hongwei Xi, and in GADTs, which are now
+available in GHC and OCaml, and even in languages like C++ and Java
+via the curiously recurring template pattern. This module instead uses
+a more arcane method of "nested" datatypes, sometimes called
+"non-regular" or "non-uniform" or heterogeneous.
+
+This implementation strategy is more similar to the one of Stefan
+Kahrs's "Red-black trees with types". That work has been called
+"complex", "all-too-clever", and "miraculous". There is no question
+that this implementation of Braun trees is significantly more complex
+than the standard one without nexted types.
+
+-}
 
 type Sym a b = (b,a,b)
                       
+{-               
+
+Ralf Hinze has designed a nested data type for enforcing Braun tree
+structural invariants, but it doesn't seem to actually support
+efficient operations like pushFront. For instance, the shape of a tree
+of size n and size n+1 can differ in \Omega(n) location, as subtrees
+of size 1 can have the shape "a" or the shape ((),a,()).
+
+To fix that problem, this type stores, in addition to the "big" tree
+type and the "small" tree type, a type of trees where each child
+subtree of the root is a small tree. When small is (), this is a,
+rather than ((),a,()).
+
+-}
+
 data B b s sas a = P b
-                 | Q (B (Sym a b) (b,a,s) (Sym a (b,a,s)) a)
+                 | Q (B (b,a,b) (b,a,s) (Sym a (b,a,s)) a)
                  | R (B (b,a,s) sas (Sym a sas) a)
                    deriving (Show)
 
---instance Show (
-
---instance (Show a, Show b, Show (b,a,s), Show sas) => Show B b s sas a where
-
 data Braun a = Braun (B a () a a)
              | Nil
+               deriving (Show)
   
-instance Show a => Show (Braun a) where
-  show Nil = "Nil"
-  show (Braun x) = "Braun " ++ (show x)
 
 popFront Nil = Nothing
 popFront (Braun (P x)) = Just (x,Nil)
@@ -103,41 +129,6 @@ popKid f (x,y,z) =
 popOne x = (x,())
 popTwo (x,y,()) = (y,x)     
 
-{-
-popFrontQ :: B (b,a,s) (s,a,s) z (s,a,t) y a ->
-             Either (B (s,a,s) (s,a,t) (Sym a (s,a,t)) (t,a,t)
--}
-{-
-popFrontQS :: B (a,a,a) (a,a,()) bam2 a ->
-             (a -> (a,())) -> 
-             (a,Either (B (a,a,a) (a,a,()) bam2 a)
-                       (B (a,a,()) a (a,a,a) a)
-popFrontQL :: B (b,a,b) (b,a,(m1,a,m2)) bam2 a ->
-             (b -> (a,(m1,a,m2))) -> 
-             (a,Either (B (b,a,b) (b,a,(m1,a,m2)) bam2 a)
-                       (B (b,a,(m1,a,m2)) (Sym a (m1,a,m2)) (Sym a (Sym a (m1,a,m2))) a))
--}
-{-
-popFrontQ :: B (b,a,b) (b,a,m) bam2 a ->
-             (b -> (a,m)) -> 
-             (a,Either (B (b,a,b) (b,a,m) bam2 a)
-                       (B b m (m,a,m) a)
--}
-{-
-popFrontR :: B (b,a,m) (m,a,m) mam2 a ->
-             (b -> (a,m)) -> 
-             (a,Either (B (b,a,m) (m,a,m) mam2 a)
-                       (B (m,a,m) (m,a,s) (m,a,m) a)
-popFrontR :: B (b,a,m) (m,a,m) mam2 a ->
-             (b -> (a,m)) -> 
-             (a,Either (B (b,a,m) (m,a,m) mam2 a)
-                       (B m s sas (m,a,m) a)
-popFrontR :: B (b,a,m) (m,a,m) mam2 a ->
-             (b -> (a,m)) -> 
-             (a,Either (B (b,a,m) (m,a,m) mam2 a)
-                       (B m s sas (m,a,m) a)
--}
-
 pushFrontB :: a -> Braun a -> Braun a
 pushFrontB x Nil = Braun $ P x
 pushFrontB x (Braun xs) =
@@ -172,3 +163,54 @@ pushFront z f j m (R x) =
   in case pushFront z (g j) m (g m) x
      of Left ans -> Right $ Q ans
         Right ans -> Right $ R ans
+        
+{-
+
+{-
+
+fromList and toList code that has yet to be rewritten for the nested
+style.
+
+-}
+
+data T a = T
+         | B a (T a) (T a)
+           deriving (Show)
+
+toList :: T a -> [a]
+toList T = []
+toList (B hd od ev) = 
+  let rest = unPair $ toList $ zipT od ev
+  in hd:rest
+
+unPair :: [(a,Maybe a)] -> [a]
+unPair [] = []
+unPair [(x,Nothing)] = [x]
+unPair ((x,Just y):ys) = x:y:(unPair ys)
+
+zipT T T = T                    
+zipT (B x T T) T = B (x,Nothing) T T
+zipT (B x odx evx) (B y ody evy) = 
+  let od = zipT odx ody
+      ev = zipT evx evy
+  in B (x,Just y) od ev
+
+fromList :: [a] -> T a
+fromList [] = T
+fromList (x:xs) = 
+  let (od,ev) = unLink $ fromList $ pairUp xs
+  in B x od ev
+     
+pairUp :: [a] -> [(a, Maybe a)]
+pairUp [] = []
+pairUp [x] = [(x,Nothing)]
+pairUp (x:y:ys) = (x,Just y):pairUp ys
+
+unLink :: T (a,Maybe b) -> (T a,T b)
+unLink T = (T,T)
+unLink (B (x,Nothing) T T) = (B x T T,T)
+unLink (B (x,Just y) od ev) =
+  let (odx,ody) = unLink od
+      (evx,evy) = unLink ev
+  in (B x odx evx, B y ody evy)
+-}
