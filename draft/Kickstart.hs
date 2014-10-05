@@ -48,7 +48,6 @@ data B b s sas a = P b
 data Braun a = Braun (B a () a a)
              | Nil
                deriving (Show)
-  
 
 popFront Nil = Nothing
 popFront (Braun (P x)) = Just (x,Nil)
@@ -170,26 +169,80 @@ pushFrontB z f j m (R x) =
         
 {-
 
-{-
+fromListT and toListT are code that has yet to be rewritten for the
+nested style. These are substantially different than the Okasaki's
+fromList and its companion toList; these use polymorphic
+recursion. The fromList is also lazier, in that it can produce values
+near the front of the output without having to read the whole
+input. As a result, it are also suitable for streams, though that
+isn't directly relevant in this nested construction.
 
-fromList and toList code that has yet to be rewritten for the nested
-style. These are substantially different than the Okasaki's fromList
-and its companion toList; these use polymorphic recursion. The
-fromList is also lazier, in that it can produce values near the front
-of the output without having to read the whole input. As a result, it
-are also suitable for streams, though that isn't directly relevant in
-this nested construction.
+We can use them to bootstrap fromList and toList for the nested type,
+though there are a lof of missing match cases here, which should make
+the reader wary.
 
 -}
+
+toList Nil = []
+toList (Braun x) = 
+  let fb x = B x T T
+      fs () = T
+      fsas x = B x T T
+  in toListT $ toT x fb fs fsas
+
+toT :: B b s sas a -> (b -> T a) -> (s -> T a) -> (sas -> T a) -> T a
+toT (P xs) fb _ _ = fb xs
+toT (Q xs) fb fs _ = 
+  let gb (p,q,r) = B q (fb p) (fb r)
+      gs (p,q,r) = B q (fb p) (fs r)
+      gsas (p,q,r) = B q (gs p) (gs r)
+  in toT xs gb gs gsas
+toT (R xs) fb fs fsas =
+  let gb (p,q,r) = B q (fb p) (fs r)
+      gs = fsas
+      gsas (p,q,r) = B q (gs p) (gs r)
+  in toT xs gb gs gsas
+
+
+smartQ :: (b -> sas) -> a -> B b s sas a -> B b s sas a -> B b s sas a
+smartQ _ h (P od) (P ev) = Q $ P (od,h,ev)
+smartQ _ h (Q od) (Q ev) = Q $ smartQ undefined h od ev
+smartQ _ h (Q od) (R ev) = Q $ smartR h od ev
+smartQ _ h (R od) (R ev) = R $ smartQ undefined h od ev
+smartQ f h (R od) (Q ev) = 
+  let g (x,y,z) = (f x,y,f z)
+  in R $ smartZ g h od ev
+smartQ f h (R (P od)) (P ev) = R $ R $ P (od,h,f ev)
+
+smartZ :: (b -> tat) -> a -> B s t tat a -> B b s' sas a -> B s t tat a
+smartZ f h (R (P od)) (P ev) = R $ R $ P (od,h,f ev)
+smartZ f h (R od) (Q ev) = 
+  let g (x,y,z) = (f x,y,f z) -- does this recursion make it very expensive?
+  in R $ smartZ g h od ev
+
+smartR :: a -> B b s (s,a,s) a -> B s t tat a -> B b s (s,a,s) a
+smartR h (P od) (P ev) = R $ P (od,h,ev)
+smartR h (R od) (Q ev) = R $ smartR h od ev
+
+fromT :: T a -> B a () a a
+fromT (B hd T T) = P hd
+fromT (B hd (B od T T) T) = R $ P (od,hd,())
+fromT (B hd od ev) =
+  let od' = fromT od
+      ev' = fromT ev
+  in smartQ id hd od' ev'
+
+fromList [] = Nil
+fromList xs = Braun $ fromT $ fromListT xs
 
 data T a = T
          | B a (T a) (T a)
            deriving (Show)
 
-toList :: T a -> [a]
-toList T = []
-toList (B hd od ev) = 
-  let rest = unPair $ toList $ zipT od ev
+toListT :: T a -> [a]
+toListT T = []
+toListT (B hd od ev) = 
+  let rest = unPair $ toListT $ zipT od ev
   in hd:rest
 
 unPair :: [(a,Maybe a)] -> [a]
@@ -204,10 +257,10 @@ zipT (B x odx evx) (B y ody evy) =
       ev = zipT evx evy
   in B (x,Just y) od ev
 
-fromList :: [a] -> T a
-fromList [] = T
-fromList (x:xs) = 
-  let (od,ev) = unLink $ fromList $ pairUp xs
+fromListT :: [a] -> T a
+fromListT [] = T
+fromListT (x:xs) = 
+  let (od,ev) = unLink $ fromListT $ pairUp xs
   in B x od ev
      
 pairUp :: [a] -> [(a, Maybe a)]
@@ -222,4 +275,3 @@ unLink (B (x,Just y) od ev) =
   let (odx,ody) = unLink od
       (evx,evy) = unLink ev
   in (B x odx evx, B y ody evy)
--}
