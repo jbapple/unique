@@ -12,10 +12,14 @@ a more arcane method of "nested" datatypes, sometimes called
 "non-regular" or "non-uniform" or heterogeneous.
 
 This implementation strategy is more similar to the one of Stefan
-Kahrs's "Red-black trees with types". That work has been called
-"complex", "all-too-clever", and "miraculous". There is no question
-that this implementation of Braun trees is significantly more complex
-than the standard one without nexted types.
+Kahrs's "Red-black trees with types" (Implementation:
+http://www.cs.kent.ac.uk/people/staff/smk/redblack/rb.html). That work
+has been called "complex"
+(http://matt.might.net/articles/red-black-delete/), "all-too-clever",
+and "miraculous" (Appel, "Efficient Verified Red-Black Trees",
+https://www.cs.princeton.edu/~appel/papers/redblack.pdf). There is no
+question that this implementation of Braun trees is significantly more
+complex than the standard one without nested types.
 
 -}
 
@@ -23,11 +27,11 @@ type Sym a b = (b,a,b)
                       
 {-               
 
-Ralf Hinze has designed a nested data type for enforcing Braun tree
-structural invariants, but it doesn't seem to actually support
-efficient operations like pushFront. For instance, the shape of a tree
-of size n and size n+1 can differ in \Omega(n) location, as subtrees
-of size 1 can have the shape "a" or the shape ((),a,()).
+Ralf Hinze, in "Manufacturing Datatypes", has designed a nested data
+type for enforcing Braun tree structural invariants, but it doesn't
+seem to actually support efficient deque operations, because the shape
+of a tree of size n and size n+1 can differ in \Omega(n) locations, as
+subtrees of size 1 can have the shape "a" or the shape ((),a,()).
 
 To fix that problem, this type stores, in addition to the "big" tree
 type and the "small" tree type, a type of trees where each child
@@ -169,7 +173,12 @@ pushFront z f j m (R x) =
 {-
 
 fromList and toList code that has yet to be rewritten for the nested
-style.
+style. These are substantially different than the Okasaki fromList and
+it's companion toList; these use polymorphic recursion and are also
+lezier, in that they can produce values near the front of the output
+without having to read the whole input. As a result, they are also
+suitable for stream, though that isn't directly relevant in this
+nested construction.
 
 -}
 
