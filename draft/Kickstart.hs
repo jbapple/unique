@@ -133,38 +133,38 @@ popKid f (x,y,z) =
 popOne x = (x,())
 popTwo (x,y,()) = (y,x)     
 
-pushFrontB :: a -> Braun a -> Braun a
-pushFrontB x Nil = Braun $ P x
-pushFrontB x (Braun xs) =
+pushFront :: a -> Braun a -> Braun a
+pushFront x Nil = Braun $ P x
+pushFront x (Braun xs) =
   let f y z = (z,y,())
       g y _ = y
       h y z = (z,y,())
-  in case pushFront x f g h xs of
+  in case pushFrontB x f g h xs of
        Left ans -> Braun $ R ans
        Right ans -> Braun ans
 
-pushFront :: a -> 
+pushFrontB :: a -> 
              (a -> big -> huge) -> 
              (a -> small -> big) -> 
              (a -> sas -> (big,a,small)) -> 
              B big small sas a -> 
              Either (B huge big (big,a,big) a)
                     (B big small sas a)
-pushFront z f _ _ (P x) = Left $ P (f z x)
-pushFront z f j m (Q x) = 
+pushFrontB z f _ _ (P x) = Left $ P (f z x)
+pushFrontB z f j m (Q x) = 
   let g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
       g k y (p,q,r) = 
         let r2 = k q r
         in (r2,y,p)
-  in case pushFront z (g f) (g j) (g (g j)) x
+  in case pushFrontB z (g f) (g j) (g (g j)) x
      of Left ans -> Left $ R ans
         Right ans -> Right $ Q ans
-pushFront z f j m (R x) = 
+pushFrontB z f j m (R x) = 
   let g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
       g k y (p,q,r) = 
         let r2 = k q r
         in (r2,y,p)
-  in case pushFront z (g j) m (g m) x
+  in case pushFrontB z (g j) m (g m) x
      of Left ans -> Right $ Q ans
         Right ans -> Right $ R ans
         
