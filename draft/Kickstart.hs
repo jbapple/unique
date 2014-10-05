@@ -173,12 +173,12 @@ pushFrontB z f j m (R x) =
 {-
 
 fromList and toList code that has yet to be rewritten for the nested
-style. These are substantially different than the Okasaki fromList and
-it's companion toList; these use polymorphic recursion and are also
-lezier, in that they can produce values near the front of the output
-without having to read the whole input. As a result, they are also
-suitable for stream, though that isn't directly relevant in this
-nested construction.
+style. These are substantially different than the Okasaki's fromList
+and its companion toList; these use polymorphic recursion. The
+fromList is also lazier, in that it can produce values near the front
+of the output without having to read the whole input. As a result, it
+are also suitable for streams, though that isn't directly relevant in
+this nested construction.
 
 -}
 
