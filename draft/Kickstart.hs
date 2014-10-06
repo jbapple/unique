@@ -89,7 +89,9 @@ fromList (x:xs) =
       most = case zs of
                Nil -> P (Id x)
                Braun many -> interpose x many splitId splitK splitId
-  in Braun most -- must also pushback in final is Just
+  in case final of
+       Nothing -> Braun most
+       Just last -> pushBack last $ Braun most
 
 popFront :: Braun a -> Maybe (a,Braun a)
 popFront Nil = Nothing
@@ -207,7 +209,36 @@ pushFrontB z f j m (R x) =
   in case pushFrontB z (g j) m (g m) x
      of Left ans -> Right $ Q ans
         Right ans -> Right $ R ans
-        
+              
+pushBack :: a -> Braun a -> Braun a
+pushBack x Nil = Braun $ P $ Id x
+pushBack x (Braun xs) =
+  let f y (Id z) = (Kids (Id y) z K)
+      g y _ = Id y
+  in case pushBackB x f g f xs of
+       Left ans -> Braun $ R ans
+       Right ans -> Braun ans
+
+pushBackSame push x (Kids od hd ev) = Kids (push x od) hd ev
+pushBackDiff push x (Kids od hd ev) = Kids od hd (push x ev)
+
+pushBackB :: a -> 
+             (a -> big a -> huge a) -> 
+             (a -> small a -> big a) -> 
+             (a -> sas a -> Kids big small a) -> 
+             B big small sas a -> 
+             Either (B huge big (Kids big big) a)
+                    (B big small sas a)
+pushBackB z f _ _ (P x) = Left $ P (f z x)
+pushBackB z f j m (Q x) = 
+  case pushBackB z (pushBackSame f) (pushBackDiff j) (pushBackSame (pushBackDiff j)) x of 
+    Left ans -> Left $ R ans
+    Right ans -> Right $ Q ans
+pushBackB z f j m (R x) = 
+  case pushBackB z (pushBackDiff j) m (pushBackSame m) x of 
+    Left ans -> Right $ Q ans
+    Right ans -> Right $ R ans
+
 {-
 
 fromListT and toListT are code that has yet to be rewritten for the
