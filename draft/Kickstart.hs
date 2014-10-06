@@ -1,3 +1,5 @@
+{-# LANGUAGE RankNTypes #-}
+
 module Kickstart where
 
 {-
@@ -93,6 +95,137 @@ fromList (x:xs) =
        Nothing -> Braun most
        Just last -> pushBack last $ Braun most
 
+
+
+{-
+myZip [] [] = ([],Nothing)
+myZip [] (y:_) = ([],Just y)
+myZip (x:xs) (y:yz) = (
+-}
+  {-
+(b a -> b a -> b (a,a)) ->
+b a -> b a -> b a -> b a -> 
+     
+zipTree :: (b a -> (a, B b s sas (a,a), Maybe a))
+           (Kids b b a -> (a,b (a,a))) ->
+           (Kids b s a -> (a,s (a,a),a)) ->
+           (sas a      -> (a,s (a,a))) ->
+           B b s sas a ->
+           (a, B b s sas (a,a), Maybe a)
+zipTree fb fbb fbs fsas (P xs) = fb xs
+zipTree fb fbb fbs fsas (Q xs) =
+  let gb (Kids od hd ev) = 
+        (hd,
+    -}       
+{-
+toListB :: (b a -> (a, B b s sas (a,a), Maybe a)) ->
+           (Kids b b a -> (a,b (a,a))) ->
+           (Kids b s a -> (a,s (a,a),a)) ->
+           (Kids s s a -> (a,s (a,a))) ->
+           (sas a      -> (a,s (a,a))) ->
+           B b s sas a -> 
+           (a, B b s sas (a,a), Maybe a)
+toListB fb _ _ _ _ (P xs) = fb xs
+toListB fb fbb fbs fss fsas (Q xs) =
+  let gb x = 
+        let (p,q) = fbb x
+        in (p,P q,Nothing)
+      gbb (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+        let (_,ods) = fbb (Kids odod undefined evod)
+            (_,evs) = fbb (Kids odev undefined evev)
+        in (hd, Kids ods (hod,hev) evs)
+      gbs (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+        let (_,ods) = fbb (Kids odod undefined evod)
+            (_,evs,last) = fbs (Kids odev undefined evev)
+        in (hd, Kids ods (hod,hev) evs,last) 
+      gss (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+        let (_,ods) = fbb (Kids odod undefined evod)
+            (_,evs) = fss (Kids odev undefined evev)
+        in (hd, Kids ods (hod,hev) evs)
+      (s,t,u) = toListB undefined gbb gbs gss gss xs
+  in (s, Q t, u)
+-}
+      
+
+twoConcat :: [(a,a)] -> [a]
+twoConcat [] = []
+twoConcat ((x,y):zs) = x:y:(twoConcat zs)
+
+toListB :: (forall a . b a -> [a]) ->
+           (forall a . Kids b b a -> (a,b (a,a))) ->
+           (forall a . Kids b s a -> (a,s (a,a),a)) ->
+           (forall a . Kids s s a -> (a,s (a,a))) ->
+           (forall a . sas a      -> (a,s (a,a))) ->
+           B b s sas a -> [a]
+toListB fb _ _ _ _ (P xs) = fb xs
+toListB fb fbb fbs fss fsas (Q xs) =
+  let gb x = 
+        let (p,q) = fbb x
+            r = fb q
+        in p:(twoConcat r)
+      gbb (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+        let (_,ods) = fbb (Kids odod undefined evod)
+            (_,evs) = fbb (Kids odev undefined evev)
+        in (hd, Kids ods (hod,hev) evs)
+      gbs (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+        let (_,ods) = fbb (Kids odod undefined evod)
+            (_,evs,last) = fbs (Kids odev undefined evev)
+        in (hd, Kids ods (hod,hev) evs,last) 
+      gss (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+        let (_,ods) = fbb (Kids odod undefined evod)
+            (_,evs) = fss (Kids odev undefined evev)
+        in (hd, Kids ods (hod,hev) evs)
+  in toListB gb gbb gbs gss gss xs
+
+-- toListB :: (Kids d e a -> (a, B (Kids d e) s sas (a,a), Maybe a)) ->
+--            (Kids (Kids d e) (Kids d e) a -> (a,Kids d e (a,a))) ->
+--            (Kids (Kids d e) s a -> (a,s (a,a),a)) ->
+--            (Kids s s a -> (a,s (a,a))) ->
+--            (sas a      -> (a,s (a,a))) ->
+--            B (Kids d e) s sas a -> 
+--            (a, B (Kids d e) s sas (a,a), Maybe a)
+-- toListB fb _ _ _ _ (P xs) = fb xs
+-- toListB fb fbb fbs fss fsas (Q xs) =
+--   let gb x = 
+--         let (p,q) = fbb x
+--         in (p,Q $ P q,Nothing)
+--       gbb (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+--         let (_,ods) = fbb (Kids odod undefined evod)
+--             (_,evs) = fbb (Kids odev undefined evev)
+--         in (hd, Kids ods (hod,hev) evs)
+--       gbs (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+--         let (_,ods) = fbb (Kids odod undefined evod)
+--             (_,evs,last) = fbs (Kids odev undefined evev)
+--         in (hd, Kids ods (hod,hev) evs,last) 
+--       gss (Kids (Kids odod hod odev) hd (Kids evod hev evev)) = 
+--         let (_,ods) = fbb (Kids odod undefined evod)
+--             (_,evs) = fss (Kids odev undefined evev)
+--         in (hd, Kids ods (hod,hev) evs)
+--       (s,t,u) = toListB gb gbb gbs gss gss xs
+--   in (s, Q t, u)
+
+{-
+toList Nil = []
+toList (Braun xs) =
+
+
+nextSame :: (Kids t t a -> (t (a,a), a)) -> 
+            (Kids (Kids t t a) (Kids t t a) a) ->
+            (Kids t t (a,a), a)
+nextSame f (Kids od hd ev) =            
+  
+
+exterpose :: B b s sas a ->
+             (b a -> [a]) ->
+             (Kids b b a -> (b (a,a), a)) ->
+             (Kids b s a -> b (a,a)) ->
+             (sas -> (s (a,a),a)) ->
+             [a]
+exterpose (P xs) fb _ _ _ = fb xs
+exterpose (Q xs) fb fbb fbs fss =
+  -}
+  
+  
 popFront :: Braun a -> Maybe (a,Braun a)
 popFront Nil = Nothing
 popFront (Braun (P (Id x))) = Just (x,Nil)
