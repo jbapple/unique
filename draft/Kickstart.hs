@@ -156,16 +156,14 @@ pushFrontB :: a ->
                     (B big small sas a)
 pushFrontB z f _ _ (P x) = Left $ P (f z x)
 pushFrontB z f j m (Q x) = 
-  let --g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
-      g k y (Kids p q r) = 
+  let g k y (Kids p q r) = 
         let r2 = k q r
         in Kids r2 y p
   in case pushFrontB z (g f) (g j) (g (g j)) x
      of Left ans -> Left $ R ans
         Right ans -> Right $ Q ans
 pushFrontB z f j m (R x) = 
-  let --g :: (ee -> bb -> cc) -> ee -> (dd,ee,bb) -> (cc,ee,dd)
-      g k y (Kids p q r) = 
+  let g k y (Kids p q r) = 
         let r2 = k q r
         in Kids r2 y p
   in case pushFrontB z (g j) m (g m) x
