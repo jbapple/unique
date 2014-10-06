@@ -53,6 +53,44 @@ data Braun a = Braun (B Id K Id a)
              | Nil
                deriving (Show)
 
+next hl hr (Kids lhs (p,q) rhs) =         
+  let (lp,lq) = hl lhs
+      (rp,rq) = hr rhs
+  in (Kids lp p rp, Kids lq q rq)
+
+interpose :: a -> B b s sas (a,a) -> 
+             (b (a,a) -> (b a, b a)) -> 
+             (s (a,a) -> (s a, s a)) -> 
+             (sas (a,a) -> (sas a, sas a)) -> 
+             B b s sas a
+interpose hd (P xs) f _ _ = 
+  let (lhs,rhs) = f xs
+  in Q $ P $ Kids lhs hd rhs
+interpose hd (R xs) fb fs fsas =
+  R $ interpose hd xs (next fb fs) fsas (next fsas fsas)
+interpose hd (Q xs) fb fs fsas =
+  Q $ interpose hd xs (next fb fb) (next fb fs) (next (next fb fs) (next fb fs))
+
+splitId (Id (x,y)) = (Id x, Id y)
+splitK K = (K,K)
+
+takePairs :: [a] -> ([(a,a)],Maybe a)
+takePairs [] = ([],Nothing)
+takePairs [x] = ([],Just x)
+takePairs (x:y:ys) = 
+  let (zs,final) = takePairs ys
+  in ((x,y):zs,final)
+
+fromList :: [a] -> Braun a
+fromList [] = Nil
+fromList (x:xs) = 
+  let (ys,final) = takePairs xs
+      zs = fromList ys
+      most = case zs of
+               Nil -> P (Id x)
+               Braun many -> interpose x many splitId splitK splitId
+  in Braun most -- must also pushback in final is Just
+
 popFront :: Braun a -> Maybe (a,Braun a)
 popFront Nil = Nothing
 popFront (Braun (P (Id x))) = Just (x,Nil)
