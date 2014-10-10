@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses, FunctionalDependencies, FlexibleInstances, UndecidableInstances, OverlappingInstances, IncoherentInstances, FlexibleContexts #-}
 
 module Kickstart where
 
@@ -150,7 +150,7 @@ toListB fb fbb fbs fss fsas (Q xs) =
 twoConcat :: [(a,a)] -> [a]
 twoConcat [] = []
 twoConcat ((x,y):zs) = x:y:(twoConcat zs)
-
+{-
 toListB :: (forall a . b a -> [a]) ->
            (forall a . Kids b b a -> (a,b (a,a))) ->
            (forall a . Kids b s a -> (a,s (a,a),a)) ->
@@ -176,6 +176,202 @@ toListB fb fbb fbs fss fsas (Q xs) =
             (_,evs) = fss (Kids odev undefined evev)
         in (hd, Kids ods (hod,hev) evs)
   in toListB gb gbb gbs gss gss xs
+-}
+
+toListB :: (forall a . s a -> [a]) ->
+           (forall a . b a -> [a]) ->
+           (forall a . b a -> b a -> b (a,a)) ->
+           (forall a . b a -> s a -> (s (a,a),a)) ->
+           (forall a . s a -> s a -> s (a,a)) ->
+           (forall a . sas a      -> (a,s (a,a))) ->
+           (forall a . sas a      -> Kids s s a) ->
+           (forall a . Kids s s a -> sas a) -> 
+           B b s sas a -> [a]
+toListB _ fb _ _ _ _ _ _ (P xs) = fb xs
+toListB fs fb fbb fbs fss _ _ _ (Q xs) =
+  let gs (Kids od hd ev) = 
+        let (q,last) = fbs od ev
+            r = fs q
+        in hd:(twoConcat r)++[last]
+      gb (Kids od hd ev) = 
+        let q = fbb od ev
+            r = fb q
+        in hd:(twoConcat r)
+      gbb (Kids odod hod odev) (Kids evod hev evev) = 
+        let ods = fbb odod evod
+            evs = fbb odev evev
+        in Kids ods (hod,hev) evs
+      gbs (Kids odod hod odev) (Kids evod hev evev) = 
+        let ods = fbb odod evod
+            (evs,last) = fbs odev evev
+        in (Kids ods (hod,hev) evs,last)
+      gss (Kids odod hod odev) (Kids evod hev evev) = 
+        let ods = fbb odod evod
+            evs = fss odev evev
+        in Kids ods (hod,hev) evs
+      gsas (Kids od hd ev) = (hd, gss od ev)
+  in toListB gs gb gbb gbs gss gsas id id xs
+toListB fs fb fbb fbs fss fsas fromSas toSas (R xs) =
+  let gs x = 
+        let (y,ys) = fsas x
+        in y:(twoConcat $ fs ys)
+      gb (Kids od hd ev) = 
+        let (q,last) = fbs od ev
+            r = fs q
+        in hd:(twoConcat r) ++ [last]
+      gbb (Kids odod hod odev) (Kids evod hev evev) = 
+        let ods = fbb odod evod
+            evs = fss odev evev
+        in Kids ods (hod,hev) evs
+      gbs (Kids odod hod odev) ys =
+        let Kids evod hev evev = fromSas ys
+            (ods,last) = fbs odod evod
+            evs = fss odev evev
+        in (toSas $ Kids ods (hod,hev) evs,last)
+      gss ys zs = 
+        let Kids odod hod odev = fromSas ys 
+            Kids evod hev evev = fromSas zs
+            ods = fss odod evod
+            evs = fss odev evev
+        in toSas $ Kids ods (hod,hev) evs
+      gsas (Kids od hd ev) = (hd, gss od ev)
+  in toListB gs gb gbb gbs gss gsas id id xs
+     
+toList Nil = []
+toList (Braun xs) = 
+  let fs K = []
+      fb (Id x) = [x]
+      fbb (Id x) (Id y) = Id (x,y)
+      fbs (Id x) K = (K,x)
+      fss K K = K
+      fsas (Id x) = (x,K)
+      fromSas (Id x) = Kids K x K
+      toSas (Kids K x K) = Id x
+  in toListB fs fb fbb fbs fss fsas fromSas toSas xs
+
+     {-
+toListB fs fb fbb fbs fss fsas fromSas toSas (R xs) =
+  let gs ys = 
+        let (hd,rest) = fsas ys
+            r = fs rest
+        in hd:(twoConcat r)
+      gb (Kids od hd ev) =
+        let (q,last) = fbs od ev
+            r = fs q
+        in hd:(twoConcat r)++[last]
+      gbb (Kids odod hod odev) (Kids evod hev evev) = 
+        let ods = fbb odod evod
+            evs = fss odev evev
+        in Kids ods (hod,hev) evs
+      gbs (Kids odod hod odev) (Kids evod hev evev) = 
+        let (ods,last) = fbs odod evod
+            evs = fss odev evev
+        in (Kids ods (hod,hev) evs,last)
+      gbb (Kids odod hod odev) (Kids evod hev evev) = 
+        let ods = fbb odod evod
+            evs = fss odev evev
+        in Kids ods (hod,hev) evs
+      gsas (Kids od hd ev) = (hd, gss od ev)
+  in toListB gs gb gbb gbs gss gsas xs
+-}
+
+{-
+class TreesEq t where
+--  tList :: t a -> [a]
+  zipeq :: t a -> t a -> t (a,a)
+
+instance TreesEq Id where
+--  tList (Id x) = [x]
+  zipeq (Id x) (Id y) = Id (x,y)
+  
+instance TreesEq K where
+--  tList K = []
+  zipeq K K = K
+
+instance (TreesEq p, TreesEq q) => TreesEq (Kids p q) where
+  zipeq (Kids odod odhd odev) (Kids evod evhd evev) =
+    Kids (zipeq odod evod) (odhd,evhd) (zipeq odev evev)
+--  tList (Kids od hd ev) = -- problem: od and ev must be similar in size
+  
+class (TreesEq b, TreesEq s) => TreesBS b s | b -> s, s -> b where
+  zipbs :: b a -> s a -> (s (a,a), a)
+
+instance TreesBS Id K where
+  zipbs (Id x) K = (K,x)
+
+instance TreesBS b s => TreesBS (Kids b b) (Kids b s) where
+  zipbs (Kids odod odhd odev) (Kids evod evhd evev) =
+    let od = zipeq odod evod
+        (ev,last) = zipbs odev evev
+    in (Kids od (odhd,evhd) ev,last)
+
+instance TreesBS b s => TreesBS (Kids b s) (Kids s s) where
+  zipbs (Kids odod odhd odev) (Kids evod evhd evev) =
+    let (od,last) = zipbs odod evod
+        ev = zipeq odev evev
+    in (Kids od (odhd,evhd) ev,last)
+  
+--instance (TreesBS b s, Sassy s sas) => TreesBS (Kids b s) sas where
+
+class ToList t where
+  makeList :: t a -> [a]
+  
+instance ToList Id where
+instance ToList K where
+instance TreesEq t => ToList (Kids t t) where
+instance TreesBS b s => ToList (Kids b s) where
+
+class Sassy s ss | s -> ss, ss -> s where
+  toSas :: Kids s s a -> ss a
+  fromSas :: ss a -> Kids s s a
+
+instance Sassy K Id where
+instance Sassy Id (Kids Id Id) where
+instance Sassy (Kids a b) (Kids (Kids a b) (Kids a b)) where
+
+toListB :: (TreesBS b s, TreesEq s, TreesEq b, ToList b) => B b s (Kids s s) a -> [a]
+toListB (P xs) = makeList xs
+toListB (Q xs) = toListB xs
+toListB (R xs) = toListB xs
+-}
+{-
+class Trees b s sas | b -> s sas, s -> b where
+  bList :: b a -> [a]
+  sList :: s a -> [a]
+  zipbb :: b a -> b a -> b (a,a)
+  zipbs :: b a -> s a -> (s (a,a), a)
+  zipss :: s a -> s a -> s (a,a)
+  zipsas :: sas a -> (a, s (a,a))
+  toSas :: Kids s s a -> sas a
+  fromSas :: sas a -> Kids s s a
+  
+instance Trees Id K Id where  
+  bList (Id x) = [x]
+  sList K = []
+  zipbb (Id x) (Id y) = Id (x,y)
+  zipbs (Id x) k = (K, x)
+  zipss K K = K
+  zipsas (Id x) = (x, K)
+  toSas (Kids K x K) = Id x
+  fromSas (Id x) = Kids K x K
+  
+instance Trees b s sas => Trees (Kids b b) (Kids b s) (Kids (Kids b s) (Kids b s)) where  
+  bList (Kids od hd ev) = 
+    hd:(twoConcat $ bList $ zipbb od ev)
+  sList (Kids od hd ev) = 
+    let (rest,last) = zipbs od ev
+    in hd:(twoConcat $ sList rest) ++ [last]
+  
+--instance Trees b s sas => Trees (Kids b s) sas (Kids sas sas) where  
+instance Trees (Kids Id K) Id (Kids Id Id) where
+  
+--instance {-Trees b s (Kids s s) =>-} Trees (Kids b s) (Kids (Kids s1 s2) (Kids s1 s2)) (Kids (Kids (Kids s1 s2) (Kids s1 s2)) (Kids (Kids s1 s2) (Kids s1 s2))) where  
+instance Trees (Kids b1 b2) s (Kids s s) => Trees (Kids (Kids b1 b2) s) (Kids s s) (Kids (Kids s s) (Kids s s)) where  
+-}
+  
+  
+  
+
 
 -- toListB :: (Kids d e a -> (a, B (Kids d e) s sas (a,a), Maybe a)) ->
 --            (Kids (Kids d e) (Kids d e) a -> (a,Kids d e (a,a))) ->
