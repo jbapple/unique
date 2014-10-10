@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 
 module Kickstart (Braun, 
-                  pushFront, pushBack, popFront, --popBack
+                  pushFront, pushBack, popFront, popBack,
                   fromList, toList
                   )
                   where
@@ -319,113 +319,92 @@ pushBackB z f j m (R x) =
   case pushBackB z (pushBackDiff j) m (pushBackSame m) x of 
     Left ans -> Right $ Q ans
     Right ans -> Right $ R ans
+    
+    
+popBackOne (Id x) = (x,K)
+popBackTwo (Kids (Id x) y K) = (x,Id y)     
 
-{-
+popBack :: Braun a -> Maybe (a,Braun a)
+popBack Nil = Nothing
+popBack (Braun (P (Id x))) = Just (x,Nil)
+popBack (Braun (Q xs)) = 
+  let (y,ys) = popBackQ xs popBackOne
+  in Just (y,case ys of
+         Left same -> Braun (Q same)
+         Right dif -> Braun (R dif))
+popBack (Braun (R (P (Kids (Id x) y K)))) = Just (x,Braun (P (Id y)))
+popBack (Braun (R (R xs))) =
+  let (y,ys) = popBackRR xs popBackTwo
+  in Just (y,case ys of
+         Left same -> Braun $ R $ R same
+         Right dif -> Braun $ Q dif)
+popBack (Braun (R (Q xs))) =
+  let (y,ys) = popBackQ xs popBackTwo
+  in Just (y,case ys of
+         Left same -> Braun $ R $ Q same
+         Right dif -> Braun $ R $ R dif)
 
-fromListT and toListT are code that has yet to be rewritten for the
-nested style. These are substantially different than the Okasaki's
-fromList and its companion toList; these use polymorphic
-recursion. The fromList is also lazier, in that it can produce values
-near the front of the output without having to read the whole
-input. As a result, it are also suitable for streams, though that
-isn't directly relevant in this nested construction.
+popBackQ :: B (Kids b b) (Kids b s) (Kids (Kids b s) (Kids b s)) a ->
+             (b a -> (a,s a)) ->
+             (a,Either (B (Kids b b) (Kids b s) (Kids (Kids b s) (Kids b s)) a)
+                       (B (Kids b s) sas (Kids sas sas) a))
+popBackQ (P (Kids bb aa ss)) f = 
+  let (x,xs) = f ss
+  in  (x,Right $ P (Kids bb aa xs))
+popBackQ (R (P xs)) f = 
+  let (y,ys) = popBackRR (P xs) (popRightKid f)
+  in (y,case ys of
+         Left same -> Left $ R same
+         Right dif -> Right $ Q dif)
+popBackQ (R (R xs)) f =
+  let (y,ys) = popBackRR (R xs) (popRightKid f)
+  in (y,case ys of
+         Left same -> Left $ R same
+         Right dif -> Right $ Q dif)
+popBackQ (R (Q xs)) f =
+  let (y,ys) = popBackQ xs (popLeftKid $ popRightKid f)
+  in (y,case ys of
+         Left same -> Left $ R $ Q same
+         Right dif -> Left $ R $ R dif)
+popBackQ (Q xs) f =
+  let (y,ys) = popBackQ xs (popRightKid f)
+  in (y,case ys of
+         Left same -> Left $ Q same
+         Right dif -> Left $ R dif)
 
-We can use them to bootstrap fromList and toList for the nested type,
-though there are a lof of missing match cases here, which should make
-the reader wary.
+popBackRR :: B (Kids b s) (Kids s s) (Kids (Kids s s) (Kids s s)) a ->
+              (b a -> (a,s a)) -> 
+             (a,Either (B (Kids b s) (Kids s s) (Kids (Kids s s) (Kids s s)) a)
+                       (B (Kids s s) (Kids s t) (Kids (Kids s t) (Kids s t)) a))
+popBackRR (P (Kids bb aa ss)) f = 
+  let (x,xs) = f bb
+  in  (x,Right $ P (Kids xs aa ss))
+popBackRR (R (P xs)) f = 
+  let (y,ys) = popBackRR (P xs) (popLeftKid f)
+  in (y,case ys of
+         Left same -> Left $ R same
+         Right dif -> Right $ Q dif)
+popBackRR (R (R xs)) f =
+  let (y,ys) = popBackRR (R xs) (popLeftKid f)
+  in (y,case ys of
+         Left same -> Left $ R same
+         Right dif -> Right $ Q dif)
+popBackRR (R (Q xs)) f =
+  let (y,ys) = popBackQ xs (popLeftKid $ popLeftKid f)
+  in (y,case ys of
+         Left same -> Left $ R $ Q same
+         Right dif -> Left $ R $ R dif)
+popBackRR (Q xs) f =
+  let (y,ys) = popBackQ xs (popLeftKid f)
+  in (y,case ys of
+         Left same -> Left $ Q same
+         Right dif -> Left $ R dif)
 
--}
-{-
-toList Nil = []
-toList (Braun x) = 
-  let fb x = B x T T
-      fs () = T
-      fsas x = B x T T
-  in toListT $ toT x fb fs fsas
-
-toT :: B b s sas a -> (b -> T a) -> (s -> T a) -> (sas -> T a) -> T a
-toT (P xs) fb _ _ = fb xs
-toT (Q xs) fb fs _ = 
-  let gb (p,q,r) = B q (fb p) (fb r)
-      gs (p,q,r) = B q (fb p) (fs r)
-      gsas (p,q,r) = B q (gs p) (gs r)
-  in toT xs gb gs gsas
-toT (R xs) fb fs fsas =
-  let gb (p,q,r) = B q (fb p) (fs r)
-      gs = fsas
-      gsas (p,q,r) = B q (gs p) (gs r)
-  in toT xs gb gs gsas
-
-
-smartQ :: (b -> sas) -> a -> B b s sas a -> B b s sas a -> B b s sas a
-smartQ _ h (P od) (P ev) = Q $ P (od,h,ev)
-smartQ _ h (Q od) (Q ev) = Q $ smartQ undefined h od ev
-smartQ _ h (Q od) (R ev) = Q $ smartR h od ev
-smartQ _ h (R od) (R ev) = R $ smartQ undefined h od ev
-smartQ f h (R od) (Q ev) = 
-  let g (x,y,z) = (f x,y,f z)
-  in R $ smartZ g h od ev
-smartQ f h (R (P od)) (P ev) = R $ R $ P (od,h,f ev)
-
-smartZ :: (b -> tat) -> a -> B s t tat a -> B b s' sas a -> B s t tat a
-smartZ f h (R (P od)) (P ev) = R $ R $ P (od,h,f ev)
-smartZ f h (R od) (Q ev) = 
-  let g (x,y,z) = (f x,y,f z) -- does this recursion make it very expensive?
-  in R $ smartZ g h od ev
-
-smartR :: a -> B b s (s,a,s) a -> B s t tat a -> B b s (s,a,s) a
-smartR h (P od) (P ev) = R $ P (od,h,ev)
-smartR h (R od) (Q ev) = R $ smartR h od ev
-
-fromT :: T a -> B a () a a
-fromT (B hd T T) = P hd
-fromT (B hd (B od T T) T) = R $ P (od,hd,())
-fromT (B hd od ev) =
-  let od' = fromT od
-      ev' = fromT ev
-  in smartQ id hd od' ev'
-
-fromList [] = Nil
-fromList xs = Braun $ fromT $ fromListT xs
-
-data T a = T
-         | B a (T a) (T a)
-           deriving (Show)
-
-toListT :: T a -> [a]
-toListT T = []
-toListT (B hd od ev) = 
-  let rest = unPair $ toListT $ zipT od ev
-  in hd:rest
-
-unPair :: [(a,Maybe a)] -> [a]
-unPair [] = []
-unPair [(x,Nothing)] = [x]
-unPair ((x,Just y):ys) = x:y:(unPair ys)
-
-zipT T T = T                    
-zipT (B x T T) T = B (x,Nothing) T T
-zipT (B x odx evx) (B y ody evy) = 
-  let od = zipT odx ody
-      ev = zipT evx evy
-  in B (x,Just y) od ev
-
-fromListT :: [a] -> T a
-fromListT [] = T
-fromListT (x:xs) = 
-  let (od,ev) = unLink $ fromListT $ pairUp xs
-  in B x od ev
+popLeftKid f (Kids x y z) =
+  let (b,bs) = f x
+  in (b,Kids bs y z)
      
-pairUp :: [a] -> [(a, Maybe a)]
-pairUp [] = []
-pairUp [x] = [(x,Nothing)]
-pairUp (x:y:ys) = (x,Just y):pairUp ys
+popRightKid f (Kids x y z) =
+  let (b,bs) = f z
+  in (b,Kids x y bs)
 
-unLink :: T (a,Maybe b) -> (T a,T b)
-unLink T = (T,T)
-unLink (B (x,Nothing) T T) = (B x T T,T)
-unLink (B (x,Just y) od ev) =
-  let (odx,ody) = unLink od
-      (evx,evy) = unLink ev
-  in (B x odx evx, B y ody evy)
--}
