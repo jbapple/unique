@@ -15,7 +15,7 @@ in the Dependent ML work of Hongwei Xi, and in GADTs, which are now
 available in GHC and OCaml, and even in languages like C++ and Java
 via the curiously recurring template pattern. This module instead uses
 a more arcane method of "nested" datatypes, sometimes called
-"non-regular" or "non-uniform" or heterogeneous.
+"non-regular" or "non-uniform" or "heterogeneous".
 
 This implementation strategy is more similar to the one of Stefan
 Kahrs's "Red-black trees with types" (Implementation:
@@ -25,7 +25,10 @@ has been called "complex"
 and "miraculous" (Appel, "Efficient Verified Red-Black Trees",
 https://www.cs.princeton.edu/~appel/papers/redblack.pdf). There is no
 question that this implementation of Braun trees is significantly more
-complex than the standard one without nested types.
+complex than the standard one without nested types. It is also likely
+less efficient, since accessing the top element in the tree takes at
+least log n time. For instance, changing to a different representation
+trategy can make operations like "head $ toList b" constant time.
 
 -}
 
@@ -59,7 +62,7 @@ data Braun a = Braun (B Id K Id a)
              | Nil
                deriving (Show)
 
-next hl hr (Kids lhs (p,q) rhs) =         
+next hl hr (Kids lhs (p,q) rhs) =
   let (lp,lq) = hl lhs
       (rp,rq) = hr rhs
   in (Kids lp p rp, Kids lq q rq)
