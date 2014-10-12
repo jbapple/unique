@@ -61,11 +61,10 @@ Ltac help :=
     | [H : _ /\ _ |- _] => destruct H
     | [|- _ /\ _] => split
     | [H : prod _ _ |- _] => destruct H
-(*    | [H : ?P, G : ?P -> ?Q |- _] => notHyp Q; assert Q; try (exact (G H)) *)
     | [H : ?P, G : _ |- _] => 
       let t := type of (G H) in
       notHyp t; assert t; try (exact (G H))
-    | _ => simpl in *; intros; auto; try omega
+    | _ => simpl in *; intros; auto; try (autorewrite with core); try omega
   end.
 
 Lemma pushFrontSize : forall a (xs:Braun a) x, size (pushFront x xs) = 1 + size xs.
@@ -73,10 +72,11 @@ Proof with help.
 induction xs... 
 Qed.
 
+Hint Rewrite pushFrontSize.
+
 Lemma pushFrontValid : forall a (xs:Braun a), validSize xs -> forall x, validSize (pushFront x xs).
 Proof with help.
 induction xs...
-rewrite pushFrontSize...
 destruct l...
 Qed.
 
