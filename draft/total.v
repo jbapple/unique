@@ -64,6 +64,8 @@ Ltac help :=
     | [H : ?P, G : _ |- _] => 
       let t := type of (G H) in
       notHyp t; assert t; try (exact (G H))
+    | [H: Lean |- match _ ?H with | Same => _ | Diff => _ end] => 
+      destruct H
     | _ => simpl in *; intros; auto; try (autorewrite with core); try omega
   end.
 
@@ -77,7 +79,6 @@ Hint Rewrite pushFrontSize.
 Lemma pushFrontValid : forall a (xs:Braun a), validSize xs -> forall x, validSize (pushFront x xs).
 Proof with help.
 induction xs...
-destruct l...
 Qed.
 
 Fixpoint popFront {a} (xs:Braun a) :=
