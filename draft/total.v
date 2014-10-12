@@ -61,22 +61,22 @@ Ltac help :=
     | [H : _ /\ _ |- _] => destruct H
     | [|- _ /\ _] => split
     | [H : prod _ _ |- _] => destruct H
-    | [H : ?P, G : ?P -> ?Q |- _] => notHyp Q; assert Q; try (exact (G H))
+(*    | [H : ?P, G : ?P -> ?Q |- _] => notHyp Q; assert Q; try (exact (G H)) *)
+    | [H : ?P, G : _ |- _] => 
+      let t := type of (G H) in
+      notHyp t; assert t; try (exact (G H))
     | _ => simpl in *; intros; auto; try omega
   end.
 
-Unset Ltac Debug.
-
-Lemma pushFrontSize : forall a (xs:Braun a) x, 1 + size xs = size (pushFront x xs).
+Lemma pushFrontSize : forall a (xs:Braun a) x, size (pushFront x xs) = 1 + size xs.
 Proof with help.
-induction xs as [|lean ods _ hd evs]...
-assert (size (pushFront hd evs) = 1 + size evs)...
+induction xs... 
 Qed.
 
 Lemma pushFrontValid : forall a (xs:Braun a), validSize xs -> forall x, validSize (pushFront x xs).
 Proof with help.
 induction xs...
-(rewrite <- pushFrontSize)...
+rewrite pushFrontSize...
 destruct l...
 Qed.
 
@@ -356,7 +356,6 @@ assert (forall n, forall a (xs:list a), n = length xs ->
 } 
 intros.
 specialize (H (length xs))...
-eapply H...
 eapply H...
 Qed.
 
