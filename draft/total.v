@@ -19,21 +19,6 @@ Fixpoint size {a} (x:Braun a) :=
     | Top _ ods _ evs => 1 + size ods + size evs
   end.
 
-(*
-Lemma eqp : forall (n:nat) m, {n = m} + {n <> m}.
-intros.
-remember (lt_eq_lt_dec n m) as nm.
-destruct nm.
-{ 
-  destruct s.
-  { right. omega. }
-  { left; omega. }
-}
-{
-  right; omega.
-}
-Defined.
-*)
 Fixpoint validSize {a} (x:Braun a) :=
   match x with
     | Tip => True
@@ -47,25 +32,6 @@ Fixpoint validSize {a} (x:Braun a) :=
          | Diff => p = q+1
        end)
   end.
-
-(*
-Fixpoint validSize {a} (x:Braun a) :=
-  match x with
-    | Tip => true
-    | Top ods _ evs => 
-      andb (validSize ods) 
-           (andb (validSize evs)
-                 (let p := size ods in
-                  let q := size evs in
-                  if eqp p q
-                  then true
-                  else if eqp p (q+1)
-                       then true
-                       else false))
-  end.
-*)
-
-Set Maximal Implicit Insertion.
 
 Definition slide x :=
   match x with
@@ -221,34 +187,6 @@ intros...
 eapply H...
 Qed.
 
-(*
-Lemma pairListLength : 
-  forall (n:nat), forall {a} (xs:list a),
-    length xs = n -> 
-    length (fst (pairList xs)) <= n.
-Proof with help.
-eapply (@well_founded_ind _ (fun p q => p < q) _ (fun z => forall a (xs:list a), length xs = z -> length (fst (pairList xs)) <= z)).
-intros.
-destruct xs.
-help.
-destruct xs.
-help.
-simpl.
-help.
-remember (pairList xs) as px.
-destruct px.
-help.
-assert (l = fst (pairList xs)); help.
-rewrite <- Heqpx. help.
-rewrite H1.
-assert (length (fst (pairList xs)) <= length xs).
-eapply H; help.
-help.
-Grab Existential Variables.
-apply well_founded_ltof.
-Qed.
-*)
-
 Fixpoint unpairBraun {a} (xs: Braun (a*a)) : (Braun a*Braun a):=
   match xs with
     | Tip => (Tip,Tip)
@@ -258,24 +196,8 @@ Fixpoint unpairBraun {a} (xs: Braun (a*a)) : (Braun a*Braun a):=
       (Top lean ods1 hd1 evs1, Top lean ods2 hd2 evs2)
   end.
 
-(*
-braunMap 
-
-Lemma braunProp : forall P xs, (forall f, P (braunMap f xs)) -> forall q r, (q,r) = unpairBraun xs -> P q /\ P r.
-*)
-
 Require Import Recdef.
 
-(*
-Fixpoint braunKids (n:nat) : prod nat nat :=
-  match n with
-    | 0 => (0,0)
-    | 1 => (1,0)
-    | S (S m) =>
-      let (p,q) := braunKids m
-      in (S p, S q)
-  end.
-*)
 Fixpoint half (n:nat) : nat :=
   match n with 
     | S (S m) => S (half m)
@@ -329,17 +251,6 @@ destruct (unpairBraun xs1);
   destruct (unpairBraun xs2)...
 Qed.
 
-(*
-Ltac helper := help; repeat (subst;
-  match goal with
-    | [_ : let (_,_) := ?x in _ |- _] => 
-      let z := fresh in remember x as z; destruct z
-    | [H : (_,_) = (_,_) |- _] => inversion H
-    | [|- let (_,_) := ?x in _ ] => 
-      let z := fresh in remember x as z; destruct z
-    | _ => repeat help
-  end).
-*)
 Lemma unpairBraunValid : 
   forall a (xs:Braun (a*a)), 
     let (p,q) := unpairBraun xs in 
