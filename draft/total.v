@@ -56,18 +56,26 @@ Ltac notHyp P :=
   end.
 
 Ltac help := 
-  repeat 
+  repeat (simpl in *; intros; auto; try (autorewrite with core); try omega;
   match goal with
+    | [H : Same = Diff |- _] => inversion H
+    | [H : Diff = Same |- _] => inversion H
     | [H : _ /\ _ |- _] => destruct H
     | [|- _ /\ _] => split
     | [H : prod _ _ |- _] => destruct H
+    | [H: Lean |- match ?H with | Same => _ | Diff => _ end] => 
+      let x := fresh in remember H as x; destruct x
+    | [H: Lean |- match _ ?H with | Same => _ | Diff => _ end] => 
+      let x := fresh in remember H as x; destruct x
+    | [H:Lean, G: match ?H with | Same => _ | Diff => _ end |- _] =>
+      let x := fresh in remember H as x; destruct x
     | [H : ?P, G : _ |- _] => 
       let t := type of (G H) in
       notHyp t; assert t; try (exact (G H))
-    | [H: Lean |- match _ ?H with | Same => _ | Diff => _ end] => 
-      destruct H
     | _ => simpl in *; intros; auto; try (autorewrite with core); try omega
-  end.
+  end).
+
+Unset Ltac Debug.
 
 Lemma pushFrontSize : forall a (xs:Braun a) x, size (pushFront x xs) = 1 + size xs.
 Proof with help.
@@ -78,7 +86,10 @@ Hint Rewrite pushFrontSize.
 
 Lemma pushFrontValid : forall a (xs:Braun a), validSize xs -> forall x, validSize (pushFront x xs).
 Proof with help.
-induction xs...
+induction xs.
+Unset Ltac Debug.
+help.
+help.
 Qed.
 
 Fixpoint popFront {a} (xs:Braun a) :=
@@ -100,8 +111,7 @@ Lemma popFrontSize :
       | Some (_,ys) => size xs = 1 + size ys
     end.
 Proof with help.
-induction xs...
-destruct l; destruct (popFront xs1)...
+induction xs; help; destruct (popFront xs1)...
 Qed.
 
 Lemma popFrontValid :
@@ -112,9 +122,9 @@ Lemma popFrontValid :
       | Some (_,ys) => validSize ys
     end.
 Proof with help.
-induction xs...
-specialize (popFrontSize xs1)...
-destruct l; destruct (popFront xs1)...
+induction xs; help; 
+  specialize (popFrontSize xs1); 
+  destruct (popFront xs1)...
 Qed.
 
 Fixpoint pushBack {a} (x:a) xs :=
@@ -135,8 +145,7 @@ Qed.
 
 Lemma pushBackValid : forall a (xs:Braun a), validSize xs -> forall x, validSize (pushBack x xs).
 Proof with help.
-induction xs...
-destruct l; help; try (rewrite <- pushBackSize)...
+induction xs; help; try (rewrite <- pushBackSize)...
 Qed.
 
 Fixpoint pairList {a} (xs: list a) :=
@@ -260,17 +269,13 @@ Proof with helper.
 Print validSize.
 Set Ltac Debug.
 Unset Ltac Debug.
-induction xs...
-pose (unpairBraunSize _ xs1).
-pose (unpairBraunSize _ xs2).
-rewrite <- HeqH0 in *.
-rewrite <- HeqH in *.
-destruct l...
-pose (unpairBraunSize _ xs1).
-pose (unpairBraunSize _ xs2).
-rewrite <- HeqH0 in *.
-rewrite <- HeqH in *.
-destruct l...
+induction xs; help;
+remember (unpairBraun xs1) as z1; destruct z1;
+pose (unpairBraunSize _ xs1);
+remember (unpairBraun xs2) as z2; destruct z2;
+pose (unpairBraunSize _ xs2);
+rewrite <- Heqz1 in *;
+rewrite <- Heqz2 in * ...
 Qed.
 
 
@@ -357,7 +362,6 @@ assert (forall n, forall a (xs:list a), n = length xs ->
 } 
 intros.
 specialize (H (length xs))...
-eapply H...
 Qed.
 
 Fixpoint toList {a} (xs:Braun a) :=
