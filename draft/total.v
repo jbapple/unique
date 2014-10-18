@@ -33,6 +33,111 @@ Fixpoint validSize {a} (x:Braun a) :=
        end)
   end.
 
+
+Ltac notHyp P :=
+  match P with
+    | ?H = ?H => fail 1
+    | _ =>
+      match goal with
+        | [ _ : P |- _ ] => fail 2
+        | _ =>
+          match P with
+            | ?P1 /\ ?P2 => first [ notHyp P1 | notHyp P2 | fail 3 ]
+            | _ => idtac
+          end
+      end
+  end.
+
+Ltac notKnown v :=
+  match goal with
+    | [ _ : (_,_) = v |- _ ] => fail 1
+    | [ _ : v = (_,_) |- _ ] => fail 1
+    | _ => idtac
+  end.
+
+Ltac clearImpls :=
+  repeat (
+      match goal with
+        | [H: _ -> _ |- _] => clear H
+        | _ => idtac
+      end).
+
+Require Import Psatz.
+
+Ltac natSolve := try (solve [clearImpls; lia]).
+
+Unset Ltac Debug.
+
+Lemma symmetric : forall {t:Type} {a:t} {b:t} (x:a=b), b=a.
+Unset Ltac Debug.
+auto.
+Qed.
+
+Unset Ltac Debug.
+
+Ltac help := 
+  repeat( 
+  repeat subst; simpl in *; intros; auto; try (autorewrite with core);
+  match goal with
+    | [H : Diff = Same |- _] => inversion H
+    | [H : Same = Diff |- _] => inversion H
+    | [H: Some _ = None |- _] => solve [inversion H]
+
+    | [H:unit |-_] => destruct H
+    | [H: Some _ = Some _ |- _] => inversion_clear H
+
+    | [H : _ /\ _ |- _] => destruct H
+    | [H : prod _ _ |- _] => destruct H
+    | [H: _ = _ |-_] => 
+      let t := type of (symmetric H) in
+      notHyp t; assert t; try (solve [exact (symmetric H)])
+
+    | [H : ?P, G : ?P -> _ |- _] => 
+      let t := type of (G H) in
+      notHyp t; assert t; try (solve [exact (G H)])
+
+    | [|- _ /\ _] => split
+
+    | _ => repeat subst; simpl in *; intros; auto; try (autorewrite with core); natSolve
+  end).
+
+Ltac clearReflexive :=
+  repeat (
+      match goal with
+        | [H: ?a = ?a |- _] => clear H
+        | _ => idtac
+      end).
+
+Ltac know t :=
+  repeat (
+      match goal with
+        | [H : _ = t |- _] => rewrite <- H in *; clearReflexive
+        | [H : t = _ |- _] => rewrite H in *; clearReflexive
+        | _ => clearReflexive
+      end).
+
+(*
+Braun trees are size-unique - every tre of the same size has the same shape
+*)
+Lemma unique : forall (xs ys:Braun unit), 
+          size xs = size ys ->
+          validSize xs ->
+          validSize ys ->
+          xs = ys.
+Proof with help.
+(* We proceed by structural induction on xs. *)
+induction xs as [|xlean xod ? ? xev]...
+{
+  (* If xs is Tip, then its size is 0. Therefore, ys's size is 0, and
+  ys is also Tip *)
+  destruct ys...
+}
+(* Otherwise xs is Top, and by symmetric reasoning, ys can't be Tip *)
+destruct ys as [|ylean yod ? yev]...
+assert (size xod = size yod /\ size xev = size yev);
+  destruct xlean; destruct ylean...
+Qed.
+
 Definition slide x :=
   match x with
     | Same => Diff
@@ -45,41 +150,6 @@ Fixpoint pushFront {a} (x:a) xs :=
     | Top lean ods v evs => Top (slide lean) (pushFront v evs) x ods
   end.
 
-Ltac notHyp P :=
-  match goal with
-    | [ _ : P |- _ ] => fail 1
-    | _ =>
-      match P with
-        | ?P1 /\ ?P2 => first [ notHyp P1 | notHyp P2 | fail 2 ]
-        | _ => idtac
-      end
-  end.
-
-Ltac help := 
-  repeat (simpl in *; intros; auto; try (autorewrite with core); try omega;
-  match goal with
-    | [H : Same = Diff |- _] => inversion H
-    | [H : Diff = Same |- _] => inversion H
-    | [H : _ /\ _ |- _] => destruct H
-    | [|- _ /\ _] => split
-    | [H : prod _ _ |- _] => destruct H
-    | [H: Lean |- match ?H with | Same => _ | Diff => _ end] => 
-      let x := fresh in remember H as x; destruct x
-    | [H: Lean |- match _ ?H with | Same => _ | Diff => _ end] => 
-      let x := fresh in remember H as x; destruct x
-    | [H:Lean, G: match ?H with | Same => _ | Diff => _ end |- _] =>
-      let x := fresh in remember H as x; destruct x
-    | [|- context[match ?X with | Some _ => _ | None => _ end]] => 
-       let z := fresh in remember X as z; destruct z
-    | [H: Some _ = Some _ |- _] => inversion_clear H
-    | [H : ?P, G : _ |- _] => 
-      let t := type of (G H) in
-      notHyp t; assert t; try (exact (G H))
-    | _ => simpl in *; intros; auto; try (autorewrite with core); try omega
-  end).
-
-Unset Ltac Debug.
-
 Lemma pushFrontSize : forall a (xs:Braun a) x, size (pushFront x xs) = 1 + size xs.
 Proof with help.
 induction xs... 
@@ -89,7 +159,8 @@ Hint Rewrite pushFrontSize.
 
 Lemma pushFrontValid : forall a (xs:Braun a), validSize xs -> forall x, validSize (pushFront x xs).
 Proof with help.
-induction xs...
+induction xs as [|lean]...
+destruct lean...
 Qed.
 
 Fixpoint popFront {a} (xs:Braun a) :=
@@ -106,13 +177,21 @@ Fixpoint popFront {a} (xs:Braun a) :=
 Lemma popFrontSize : 
   forall {a} (xs:Braun a),
     validSize xs -> 
+    size xs = 
     match popFront xs with
-      | None => 0 = size xs
-      | Some (_,ys) => size xs = 1 + size ys
+      | None => 0
+      | Some (_,ys) => 1 + size ys
     end.
 Proof with help.
-induction xs...
+induction xs as [|lean xod]...
+remember (popFront xod) as px; destruct px...
+destruct lean...
 Qed.
+
+
+Functional Scheme popFront_ind := Induction for popFront Sort Prop.
+
+Check popFront_ind.
 
 Lemma popFrontValid :
   forall {a} (xs:Braun a),
@@ -122,10 +201,10 @@ Lemma popFrontValid :
       | Some (_,ys) => validSize ys
     end.
 Proof with help.
-induction xs; help; 
-  specialize (popFrontSize xs1); 
-  destruct (popFront xs1)...
-inversion HeqH0...
+induction xs as [|lean ods]...
+pose (@popFrontSize a)...
+remember (popFront ods) as p; destruct p...
+destruct lean...
 Qed.
 
 Fixpoint pushBack {a} (x:a) xs :=
@@ -138,16 +217,22 @@ Fixpoint pushBack {a} (x:a) xs :=
       end
   end.
 
-Lemma pushBackSize : forall a (xs:Braun a) x, 1 + size xs = size (pushBack x xs).
+Lemma pushBackSize : forall a (xs:Braun a) x, size (pushBack x xs) = 1 + size xs.
 Proof with help.
-induction xs...
-destruct l; help; try (rewrite <- IHxs1); try (rewrite <- IHxs2)...
+induction xs as [|lean]...
+Show.
+destruct lean...
 Qed.
+
+Hint Rewrite pushBackSize.
 
 Lemma pushBackValid : forall a (xs:Braun a), validSize xs -> forall x, validSize (pushBack x xs).
 Proof with help.
-induction xs; help; try (rewrite <- pushBackSize)...
+induction xs as [|lean]...
+destruct lean...
 Qed.
+
+Hint Resolve pushBackValid.
 
 Fixpoint pairList {a} (xs: list a) :=
   match xs with
@@ -161,48 +246,37 @@ Fixpoint pairList {a} (xs: list a) :=
 Ltac helper := repeat (help; repeat (subst;
   match goal with
     | [_ : let (_,_) := ?x in _ |- _] => 
-      let z := fresh in remember x as z; destruct z
+      notKnown x;
+(*    idtac "destra"; idtac x; idtac "destrb";*)
+    let z := fresh in remember x as z; destruct z; know x
     | [H : (_,_) = (_,_) |- _] => inversion H
     | [|- let (_,_) := ?x in _ ] => 
-      let z := fresh in remember x as z; destruct z
+      notKnown x;
+      let z := fresh in remember x as z; destruct z; know x
+    | [|- context[let (_,_) := ?x in _] ] => 
+      notKnown x;
+      let z := fresh in remember x as z; destruct z; know x
     | _ => repeat help
   end)).
 
+Unset Ltac Debug.
+
+Lemma pairListLengthHelp :
+  let f := fun {a} (xs:list a) =>
+            let (p,q) := pairList xs in
+            length xs = length p + length p + (match q with None => 0 | _ => 1 end) in
+  forall {a} ys, (f ys /\ forall (y:a), f (cons y ys)).
+Proof with helper.
+induction ys; unfold f in * ...
+Qed.
+
 Lemma pairListLength :
   forall {a} (xs:list a),
-    forall p q,
-      (p,q) = pairList xs ->
-      length xs = length p + length p + (match q with None => 0 | _ => 1 end).
+    let (p,q) := pairList xs in
+    length xs = length p + length p + (match q with None => 0 | _ => 1 end).
 Proof with helper.
-assert (forall n, forall {a} (xs:list a), 
-          length xs = n ->
-          forall p q,
-            (p,q) = pairList xs ->
-            n = length p + length p + 
-                (match q with None => 0 | _ => 1 end)).
-{
-  eapply (@well_founded_ind 
-            _ 
-            (fun p q => p < q) 
-            lt_wf (fun z => forall {a} (xs:list a), 
-                              length xs = z ->
-                              forall p q,
-                                (p,q) = pairList xs ->
-                                z = length p + length p + 
-                                    (match q with None => 0 | _ => 1 end)))...
-  {
-    destruct xs; try (destruct xs)...
-    remember (pairList xs) as px; destruct px...
-    erewrite H with (y := length xs) (p := l) (q := Some a0)...
-  } {
-    destruct xs; try (destruct xs)...
-    remember (pairList xs) as px; destruct px...
-    erewrite H with (y := length xs) (p := l) (q := None)...
-  }
-}
-intros...
-specialize (H (length xs) _ xs eq_refl p (Some a0))...
-specialize (H (length xs) _ xs eq_refl p None)...
+intros a xs.
+pose (pairListLengthHelp xs)...
 Qed.
 
 Fixpoint unpairBraun {a} (xs: Braun (a*a)) : (Braun a*Braun a):=
@@ -224,10 +298,8 @@ Fixpoint half (n:nat) : nat :=
 
 
 Lemma halfDecreasing : forall n , half n < S n /\ half (S n) < S n.
-intros.
-induction n.
-help.
-help.
+Proof with help.
+induction n...
 Qed.
 
 
@@ -244,14 +316,12 @@ Function fromListHelp (n:nat) {a} (xs:list a) {measure id n} : Braun a :=
       end
   end.
 Proof with help.
-help...
-clear.
-unfold id.
-eapply (halfDecreasing m).
+unfold id...
+pose (halfDecreasing)...
 Qed.
 
 Check fromListHelp_equation.
-
+Hint Rewrite fromListHelp_equation.
 
 Functional Scheme fromListHelp_ind := Induction for fromListHelp Sort Prop.
 Check fromListHelp_ind.
@@ -260,30 +330,38 @@ Definition fromList {a} (xs:list a) :=
   fromListHelp (length xs) _ xs.
 
 Lemma unpairBraunSize : 
-  forall a (xs:Braun (a*a)), 
+  forall {a} (xs:Braun (a*a)), 
     let (p,q) := unpairBraun xs in 
     size p = size xs /\ size q = size xs.
-Proof with help.
+Proof with helper.
 induction xs...
-destruct (unpairBraun xs1);
-  destruct (unpairBraun xs2)...
+Qed.
+
+Definition bothValid {a} (p:Braun a) (q:Braun a) := validSize p /\ validSize q.
+
+Lemma unpairBraunValidHelp : 
+  forall {a} (xs:Braun (a*a)), 
+    let (p,q) := unpairBraun xs in 
+    validSize xs -> bothValid p q.
+Proof with helper.
+induction xs as [|? ods ? ? evs]...
+{ unfold bothValid... }
+
+unfold bothValid in * |- ...
+
+pose (@unpairBraunSize a)...
+know (unpairBraun ods); know (unpairBraun evs)...
+
+unfold bothValid; destruct l...
 Qed.
 
 Lemma unpairBraunValid : 
-  forall a (xs:Braun (a*a)), 
+  forall {a} (xs:Braun (a*a)), 
     let (p,q) := unpairBraun xs in 
     validSize xs -> validSize p /\ validSize q.
 Proof with helper.
-Print validSize.
-Set Ltac Debug.
-Unset Ltac Debug.
-induction xs; help;
-remember (unpairBraun xs1) as z1; destruct z1;
-pose (unpairBraunSize _ xs1);
-remember (unpairBraun xs2) as z2; destruct z2;
-pose (unpairBraunSize _ xs2);
-rewrite <- Heqz1 in *;
-rewrite <- Heqz2 in * ...
+intros a xs.
+pose (unpairBraunValidHelp xs)...
 Qed.
 
 
@@ -296,81 +374,63 @@ Lemma pairListHalf : forall a (xs:list a), length (fst (pairList xs)) = half (le
                                            /\ forall x, length (fst (pairList (x :: xs))) = half (length (x :: xs)).
 Proof with helper.
 induction xs...
-remember (pairList xs) as px; destruct px...
 Qed.
 
-Lemma fromListHelpValidSize : forall a (xs:list a), 
-                            length xs = size (fromListHelp (length xs) a xs)
-                            /\ validSize (fromListHelp (length xs) a xs).
+Require Import Coq.Init.Specif.
+
+Definition validTemp {a} k (v:Braun a) :=
+  k = size v /\ validSize v.
+
+
+Lemma fromListValidSizeHelp : forall (axs:{a : Type & list a}), 
+                              let a := projT1 axs in
+                              let xs:= projT2 axs in
+                              validTemp (length xs) (fromList xs).
 Proof with helper.
-assert (forall n, forall a (xs:list a), n = length xs ->  
-                            n = size (fromListHelp n a xs)
-                            /\ validSize (fromListHelp (length xs) a xs)).
-{
-  eapply (@well_founded_ind _ (fun p q => p < q) lt_wf 
-                            (fun z => 
-                               forall a (xs:list a), 
-                                 z = length xs ->  
-                                 z = size (fromListHelp z a xs)
-                                 /\ validSize (fromListHelp (length xs) a xs))).
-  (* Again, we need to get to the non-nill case to find the recursive call *)
-  destruct xs.
+(* Strong induction on the length of the list *)
+apply (induction_ltof1 _ (fun bys => @length (projT1 bys) (projT2 bys))); 
+  unfold ltof; unfold fromList;
+  intros axs; destruct axs as [a xs];
+  destruct xs as [|y ys]...
+{ unfold validTemp; helper... } (* The base case is trivial *)
+(* For the inductive case, the output (cons y ?) *)
+assert (exists p, exists q, (p,q) = pairList ys) as Z; eauto.
+destruct Z as [p [q]]...
+specialize (@H (existT _ _ p))...
+Proof with (repeat (know (pairList ys); helper)).
+  assert (length p < S (length ys)) as ll...
   {
-    rewrite fromListHelp_equation...
-    rewrite fromListHelp_equation...
+    pose (pairListLength ys)...
+  }
+  assert (half (length ys) = length l)...
+  {
+    pose pairListHalf...
+  }
+  know (half (length ys)).
+  pose (unpairBraunSize (fromListHelp (length l) _ l))...
+  know (unpairBraun (fromListHelp (length l) _ l))...
+  unfold validTemp in * ...
+  {
+    pose (pairListLength ys)...
+    destruct o...
   }
   {
-    intros.
-    rewrite fromListHelp_equation.
-    simpl.
-    remember (pairList xs) as px; destruct px.
-    (* Now the inductive call *)
-    assert (length l = size (fromListHelp (length l) (a * a) l) /\ validSize (fromListHelp (length l) (a * a) l)).      {
-      eapply (@H (length l))...
-      assert (length xs >= length l + length l)...
-      assert (length xs = 2*(length l) \/ length xs = 2*(length l) + 1)...
-      pose (pairListLength xs l o)...
-      rewrite H0...
-    }
-    assert (half (length xs) = length l).
-    {
-      pose (pairListHalf _ xs)...
-      rewrite <- Heqpx in * ...
-    }
-    simpl in *.
-    rewrite H0.
-    rewrite H2.
-    remember (unpairBraun (fromListHelp (length l) (a * a) l)) as up; destruct up as [evs ods].
-    (* Now we need to know that evs and ods are validSized *)
-    pose (fromListHelp (length l) (a * a) l) as recur.
-    fold recur in Hequp.
-    fold recur in H1.
-    pose (unpairBraunValid _ recur).
-    rewrite <- Hequp in * .
-    pose (pairListLength xs l o Heqpx).
-    pose (unpairBraunSize _ recur).
-    rewrite <- Hequp in * .
-    rewrite fromListHelp_equation.
-    rewrite <- Heqpx.
-    rewrite H2.
-    fold recur.
-    rewrite <- Hequp.
-    destruct o.
-    {
-      helper.
-      rewrite <- pushBackSize...
-      apply pushBackValid...
-      rewrite <- pushBackSize...
-    }
-    {
-      helper...
-    }      
+    pose (unpairBraunValid (fromListHelp (length l) _ l))...
+    know (unpairBraun (fromListHelp (length l) _ l))...  
+    destruct o...
   }
-} 
-intros.
-specialize (H (length xs))...
 Qed.
 
+
+Lemma fromListValidSize : forall a (xs:list a), 
+                            length xs = size (fromList xs)
+                            /\ validSize (fromList xs).
+Proof with helper.
+intros a xs.
+pose (fromListValidSizeHelp (existT _ _ xs))...
+Qed.
+
+idtac
 Fixpoint toList {a} (xs:Braun a) :=
   match xs with
     | Tip => nil
