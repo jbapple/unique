@@ -10,6 +10,15 @@ Inductive Braun a :=
   Tip : Braun a
 | Top : Lean -> Braun a -> a -> Braun a -> Braun a.
 
+Fixpoint sameShape {A B} (x:Braun A) (y:Braun B) :=
+  match x,y with
+      | Tip,Tip => True
+      | Tip,_ => False
+      | _,Tip => False
+      | Top _ xleft _ xright, Top _ yleft _ yright =>
+        sameShape xleft yleft /\ sameShape xright yright
+  end.
+
 Arguments Tip [a].
 Arguments Top [a] l ods hd evs.
 
@@ -32,7 +41,6 @@ Fixpoint validSize {a} (x:Braun a) :=
          | Diff => p = q+1
        end)
   end.
-
 
 Ltac notHyp P :=
   match P with
@@ -116,10 +124,87 @@ Ltac know t :=
         | _ => clearReflexive
       end).
 
+
+Lemma unique : forall A B, forall (x:Braun A) (y:Braun B), 
+          size x = size y ->
+          validSize x ->
+          validSize y ->
+          sameShape x y.
+Proof with help.
+induction x; destruct y...
+assert (size x1 = size y1)...
+destruct l; destruct l0...
+assert (size x2 = size y2)...
+destruct l; destruct l0...
+Qed.
+
+Lemma strong_induction: forall (P:nat->Prop) k, P 0 -> (forall n, (forall m, m < n -> P m) -> P n) 
+                                    -> P k.
+Proof with help.
+intros P k P0 Pless.
+assert (let U := (fun r => forall x, x < r -> P x) in 
+        forall n : nat, 
+          U 0 -> 
+          (forall m, U m -> U (S m)) -> 
+          U n)
+  as redu
+    by (induction n; help).
+specialize (redu (S k)).
+assert (forall x, x < 0 -> P x) by help...
+assert (forall m : nat,
+          (forall x : nat, x < m -> P x) -> forall x : nat, x < S m -> P x)...
+assert (forall q, q < x -> P q)...
+assert (q < m)...
+Qed.
+
+Lemma unique2 : forall (xs ys:Braun unit), 
+          size xs = size ys ->
+          validSize xs ->
+          validSize ys ->
+          xs = ys.
+Proof with help.
+intros xs.
+remember (size xs) as n.
+generalize dependent xs.
+pattern n.
+apply (strong_induction _ n).
+{
+  help.
+  destruct xs; destruct ys...
+}
+{
+  help.
+  destruct xs; destruct ys...
+  assert (xs1 = ys1).
+  {
+    apply H with (m := size xs1)...
+    destruct l; destruct l0...
+  }
+  assert (xs2 = ys2).
+  {
+    apply H with (m := size xs2)...
+  }
+  destruct l; destruct l0...
+}
+Qed.
+
+Lemma unique3 : forall (xs ys:Braun unit), 
+          size xs = size ys ->
+          validSize xs ->
+          validSize ys ->
+          xs = ys.
+Proof with help.
+induction xs; induction ys...
+assert (size xs1 = size ys1)...
+destruct l; destruct l0...
+assert (size xs2 = size ys2)...
+destruct l; destruct l0...
+Qed.
+
 (*
-Braun trees are size-unique - every tre of the same size has the same shape
+Braun trees are size-unique - every tree of the same size has the same shape
 *)
-Lemma unique : forall (xs ys:Braun unit), 
+Lemma unique4 : forall (xs ys:Braun unit), 
           size xs = size ys ->
           validSize xs ->
           validSize ys ->

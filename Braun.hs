@@ -18,6 +18,13 @@ size (Braun n _) = n
 
 {-
 
+In valid Braun trees, the left tree either has the same size as the
+right tree or is larger by 1.
+
+-}
+
+{-
+
 Okasaki has a linear-time version of fromList that requires less code
 and no polymorphic recursion, but it is less lazy, and so can't
 complete queries like "fst $ popFront $ fromList [0..]". This version
@@ -102,7 +109,7 @@ data UpperBound a = Exact a
 
 -- If the input is infinite, find an upper bound if one exists. If the
 -- inpute is finite, returns an upper bound or Nothing. If Nothing,
--- there may be an upper bound that just wan't found.
+-- there may be an upper bound that just wasn't found.
 ub :: (a -> b -> Ordering) -> a -> Pre b -> UpperBound b
 ub f x t = go f x t 0 1
   where 

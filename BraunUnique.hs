@@ -22,7 +22,7 @@ empty = Unique 0 B.empty
 size (Unique n _) = n
 
 -- The ith Braun tree has size \sqrt{i \log i}, though the last Braun
--- tree may be smaller.
+-- tree in a set may be smaller.
 sizes = [max 1 (round (j * sqrt((log j)/(log 2)))) | i <- [1..], let j = fromIntegral i]
         
 -- fromList is O(n)
@@ -38,15 +38,19 @@ fromList xs =
 -- toList is O(n)
 toList (Unique _ xs) = concatMap B.toList (B.toList xs)
 
+comp :: Ord a => a -> B.Braun a -> Ordering
 comp y b = let (h,_) = B.popFront b
            in compare y h
 
--- Each search in a Braun tree is O(\log^2 n). This method uses two,
--- so is also O(\log^2 n).
+-- Find the greatest lower bound for an element in the set. Each
+-- search in a Braun tree is O(\log^2 n). This method uses two, so is
+-- also O(\log^2 n).
 glb x (Unique n xs) = 
   do b <- B.glb comp x xs
      B.glb compare x b
 
+-- Given a list of Braun trees and a list of their intended sizes,
+-- shuffle the elements around until the trees are the right sizes.
 fixupList :: [B.Braun a] -> [Int] -> [B.Braun a]
 fixupList [] _ = []
 fixupList [x] _ = 
@@ -83,7 +87,7 @@ insert x (Unique n xs) =
        (eq:rev_lt,_) -> (reverse rev_lt) ++ [B.insert x eq] ++ gt
        
 -- delete is just insert in reverse, and so has the same time
--- complexity
+-- complexity.
 delete :: Ord a => a -> Unique a -> Unique a
 delete x (Unique 0 _) = empty
 delete x (Unique n xs) =
